@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <modification>
     <id>SMARTY_MINIFY</id>
-    <version>1.1</version>
+    <version>1.2</version>
     <vqmver required="true">2.6.0</vqmver>
     <author>Polevik Yurii</author>
 
@@ -53,8 +53,17 @@
 		if(!empty($content))
 			$this->js->add_code($params['id'], $content, $params['priority']);
 			
+
 		if(!empty($params['render']))
-			return $this->js->render($params['id']);
+		{
+			if(!isset($params['minify']))
+				$params['minify'] = null;	
+			
+			if(!isset($params['combine']))
+				$params['combine'] = true;
+			
+			return $this->js->render($params['id'], $params['minify'], $params['combine']);
+		}
 	}	
 	/*
 	* Отмена регистрации js фал(а|ов) или кода
@@ -81,8 +90,7 @@
 			$params['minify'] = null;
 	
 		return $this->js->render($params['id'], $params['minify'], $params['combine']);
-	}
-	
+	}	
 	
 	/*
 	* Функции для работа с файлами стилей
@@ -95,15 +103,26 @@
 
 		if(!isset($params['priority']))
 			$params['priority'] = 10;
+		
+		if(!isset($params['less']))
+			$params['less'] = false;
 			
 		if(!empty($params['include']))
-			$this->css->add_files($params['id'], $params['include'], $params['priority']);
+			$this->css->add_files($params['id'], $params['include'], $params['priority'], $params['less']);
 		
 		if(!empty($content))
-			$this->css->add_code($params['id'], $content, $params['priority']);
-			
+			$this->css->add_code($params['id'], $content, $params['priority'], $params['less']);
+
 		if(!empty($params['render']))
-			return $this->css->render($params['id']);
+		{
+			if(!isset($params['minify']))
+				$params['minify'] = null;	
+			
+			if(!isset($params['combine']))
+				$params['combine'] = true;
+			
+			return $this->css->render($params['id'], $params['minify'], $params['combine']);
+		}
 	}	
 	/*
 	* Отмена регистрации css фал(а|ов) или кода
@@ -131,6 +150,7 @@
 	
 		return $this->css->render($params['id'], $params['minify'], $params['combine']);
 	}
+	
 #SMARTY_MINIFY]]></add>
         </operation>
 	</file>	

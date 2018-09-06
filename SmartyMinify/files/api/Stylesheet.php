@@ -21,6 +21,10 @@ class Stylesheet extends Simpla
 	protected $min_filesize = 256;
 	
 	protected $order_num = 0;
+	
+	// lessphp
+	protected $less_used = false;
+	protected $less_object = null;
 
 	/*
 	* Регистрация css фал(а|ов)
@@ -28,7 +32,7 @@ class Stylesheet extends Simpla
 	* @param $files
 	* @param integer $priority
 	*/
-	public function add_files($id, $files, $priority=10)
+	public function add_files($id, $files, $priority=10, $less=false)
 	{
 		$event = $this->get_event($id);
 		
@@ -37,13 +41,16 @@ class Stylesheet extends Simpla
 			$file = trim($path, '/ ');
 			$path = VQMod::modCheck($this->config->root_dir . $file);
 			if(is_file($path))
-				$event->data[$path] = (object) array('type'=>'file', 'time'=>filemtime($path), 'original'=>$file, 'event'=>$event->id);
+				$event->data[$path] = (object) array('type'=>'file', 'time'=>filemtime($path), 'original'=>$file, 'event'=>$event->id, 'less'=>$less);
 		}
 
 		if(!$event->data)
 			return false;
 		
 		$event->priority = intval($priority);
+
+		if($less)
+			$this->less_used = true;
 		
 		return $this->events[$event->id] = $event;
 	}
@@ -54,15 +61,18 @@ class Stylesheet extends Simpla
 	* @param string $code
 	* @param integer $priority
 	*/
-	public function add_code($id, $code, $priority=10)
+	public function add_code($id, $code, $priority=10, $less=false)
 	{
 		$event = $this->get_event($id);
 		
 		if(!$code = trim($code))
 			return false;
 		
-		$event->data[$code] = (object) array('type'=>'code', 'time'=>0, 'event'=>$event->id);
+		$event->data[$code] = (object) array('type'=>'code', 'time'=>0, 'event'=>$event->id, 'less'=>$less);
 		$event->priority = intval($priority);
+		
+		if($less)
+			$this->less_used = true;
 		
 		return $this->events[$event->id] = $event;
 	}
@@ -145,7 +155,10 @@ class Stylesheet extends Simpla
 		{
 			foreach($events_data as $css=>$data)
 			{
-				if($e->type == 'code')
+				if($data->less)
+					$this->parse_less($css, $data);
+				
+				if($data->type == 'code')
 					 $result .= $this->render_tag($css);
 				 else
 					 $result .= $this->render_tag(false, $data->original);
@@ -179,6 +192,10 @@ class Stylesheet extends Simpla
 					else
 						$prefix = pathinfo($e->original, PATHINFO_FILENAME);
 				}
+				elseif(!is_null($event_id))
+				{
+					$prefix = $event_id;
+				}
 				$result = $this->proteced($events_data, $prefix, $minify);
 			}
 		}
@@ -200,7 +217,29 @@ class Stylesheet extends Simpla
 		// Нет основного кеш-файла 
 		if(!is_file($cachePath))
 		{
-			$content = $this->minify(array_keys($data), $cachePath, $minify);
+			
+			// Есть less. Проверим и компилируем массив
+			if($this->less_used)
+			{
+				$new_data = array();
+				foreach($data as $css=>$_data)
+				{
+					if($_data->less)
+						$this->parse_less($css, $_data);
+
+					$new_data[$css] = $_data;
+				}
+				$data = $new_data;						
+			}
+			
+			
+			$minifier = $this->get_minifier(array_keys($data), $minify);
+			$content = $minifier->minify($cachePath);
+			
+			// Если контент меньше min_filesize то отдаем его в html
+			if(strlen($content) > $this->min_filesize)
+				$content = false;
+			
 			if($this->gzip_level && !$content)
 				$cacheFile = $cacheFile.'.gz'.$this->gzip_level;
 		}
@@ -232,38 +271,108 @@ class Stylesheet extends Simpla
 			
 
 	
-	protected function render_tag($content, $css_file)
+	/*
+	* Обрабока less синтаксиса
+	*/
+	protected function parse_less(&$resource, &$data)
 	{
-		if($content)
-			return '<style type="text/css">' . $content . '</style>';
-		else
-			return '<link href="' . $css_file . '" rel="stylesheet"/>';
+
+		try {
+
+			$key = $this->hash(var_export($data, 1));
+		
+			if($data->type == 'code')
+				$prefix = $data->event;
+			else
+				$prefix = pathinfo($data->original, PATHINFO_FILENAME);
+			
+			list($cacheFile, $cachePath) = $this->get_cacheFile($data, $prefix . '.less');
+
+			// Если код
+			if($data->type == 'code')
+			{
+				// Есть кеш-файл
+				if(is_file($cachePath))
+				{
+					$resource = file_get_contents($cachePath);
+					return true;
+				}
+				else
+				{
+					$resource = $this->get_less()->compile($resource);
+					return file_put_contents($cachePath, $resource);
+				}
+			}
+			else
+			{
+				if (!is_file($cachePath) || filemtime($resource) > filemtime($cachePath)) 
+				{
+					
+					// Обрабатываем less
+					$content = $this->get_less()->compileFile($resource);
+
+					// Подменим путь к прикладным файлам
+					$minifier = $this->get_minifier($content, false);
+					$minifier->setRootSource($data->original);
+					$minifier->minify($cachePath);
+
+				}
+
+				$resource = $cachePath;
+				$data->original = $cacheFile;
+				return true;
+			}
+				
+		
+		} 
+		catch (exception $e) 
+		{
+			trigger_error("Less error: " . $e->getMessage(), E_USER_WARNING);
+		}
+
+		return false;
 	}
 	
 	
-	protected function minify($data, $cache, $minify)
+	
+	
+	
+	
+	/* 
+	* Получения обыекта lessphp
+	*/	
+	protected function get_less()
+	{
+		if(is_null($this->less_object))
+		{
+			include_once $this->config->root_dir . '/resize/less/lessc.inc.php';
+			$this->less_object = new lessc;
+		}
+		return $this->less_object;
+	}
+	
+		
+
+	
+	/*
+	* MatthiasMullie minify object
+	*/
+	protected function get_minifier($data, $minify)
 	{
 		// Используем сжатие
 		require_once $this->config->root_dir . '/resize/MatthiasMullie/autoload.php';
-		if($minify)
-		{
-			$minifier = new MatthiasMullie\Minify\CSS($data);
-			$content = $minifier->minify($cache);
-		}
-		else // Просто клеим
-		{
-			$minifier = new MatthiasMullie\Minify\CSSPacker($data);
-			$content = $minifier->minify($cache);
-		}
 		
-		// Если контент меньше min_filesize то отдаем его в html
-		if(strlen($content) > $this->min_filesize)
-			$content = false;
-
-		// Возвращаем контент или false (если отдаем файлами)
-		return $content;
+		if($minify)
+			$minifier = new MatthiasMullie\Minify\CSS($data);
+		else // Просто клеим
+			$minifier = new MatthiasMullie\Minify\CSSPacker($data);
+			
+		// Возвращаем контент	
+		return $minifier;
 	}
 
+	
+	
 	/*
 	* Формируем название кеш-файла исходя из параметров
 	*/
@@ -274,6 +383,17 @@ class Stylesheet extends Simpla
 		$cacheFile = $this->cache_dir . $key . '_' . $prefix . '.css';
 		return array($cacheFile, $this->config->root_dir . $cacheFile);
 	}
+			
+			
+			
+	protected function render_tag($content, $css_file)
+	{
+		if($content)
+			return '<style type="text/css">' . $content . '</style>';
+		else
+			return '<link href="' . $css_file . '" rel="stylesheet"/>';
+	}
+	
 			
 			
 	/*

@@ -1,0 +1,27 @@
+.box-shadow(@x, @y, @blur, @color) {
+  box-shadow: @arguments;
+  -webkit-box-shadow: @arguments;
+  -moz-box-shadow: @arguments;
+}
+.menu {
+  .box-shadow(1px, 1px, 5px, #aaa);
+}
+
+
+.mix(@color: red, @height: 20px, @pad: 12px) {
+  border: 1px solid @color;
+  height: @height - @pad;
+  padding: @pad;
+}
+
+.default1 {
+  .mix();
+}
+
+.default2 {
+  .mix(blue);
+}
+
+.default3 {
+  .mix(blue, 40px, 5px);
+}

@@ -29,6 +29,13 @@ use MatthiasMullie\PathConverter\Converter;
 class CSSPacker extends Minify
 {
 
+	protected $source_root = '';
+
+	
+	public function setRootSource($source)
+	{
+		$this->source_root = strval($source);
+	}
 
     /**
      * Move any import statements to the top.
@@ -62,7 +69,7 @@ class CSSPacker extends Minify
      *
      * @return string The minified data
      */
-    public function execute($path = null, $parents = array())
+    public function execute($path = null)
     {
         $content = '';
 
@@ -80,7 +87,7 @@ class CSSPacker extends Minify
             // restore the string we've extracted earlier
             $css = $this->restoreExtractedData($css);
 
-            $source = is_int($source) ? '' : $source;
+            $source = is_int($source) ? $this->source_root : $source;
 
             /*
              * If we'll save to a new path, we'll have to fix the relative paths
@@ -235,53 +242,6 @@ class CSSPacker extends Minify
    
 
 
-
-   
-
-    /**
-     * Find all `calc()` occurrences.
-     *
-     * @param string $content The CSS content to find `calc()`s in.
-     *
-     * @return string[]
-     */
-    protected function findCalcs($content)
-    {
-        $results = array();
-        preg_match_all('/calc(\(.+?)(?=$|;|calc\()/', $content, $matches, PREG_SET_ORDER);
-
-        foreach ($matches as $match) {
-            $length = strlen($match[1]);
-            $expr = '';
-            $opened = 0;
-
-            for ($i = 0; $i < $length; $i++) {
-                $char = $match[1][$i];
-                $expr .= $char;
-                if ($char === '(') {
-                    $opened++;
-                } elseif ($char === ')' && --$opened === 0) {
-                    break;
-                }
-            }
-
-            $results['calc('.count($results).')'] = 'calc'.$expr;
-        }
-
-        return $results;
-    }
-
-    /**
-     * Check if file is small enough to be imported.
-     *
-     * @param string $path The path to the file
-     *
-     * @return bool
-     */
-    protected function canImportBySize($path)
-    {
-        return ($size = @filesize($path)) && $size <= $this->maxImportSize * 1024;
-    }
 
     /**
      * Check if file a file can be imported, going by the path.

@@ -145,7 +145,7 @@ class Javascript extends Simpla
 		{
 			foreach($events_data as $js=>$data)
 			{
-				if($e->type == 'code')
+				if($data->type == 'code')
 					 $result .= $this->render_tag($js);
 				 else
 					 $result .= $this->render_tag(false, $data->original);
@@ -178,6 +178,10 @@ class Javascript extends Simpla
 						$prefix = $e->event;
 					else
 						$prefix = pathinfo($e->original, PATHINFO_FILENAME);
+				}
+				elseif(!is_null($event_id))
+				{
+					$prefix = $event_id;
 				}
 				$result = $this->proteced($events_data, $prefix, $minify);
 			}
