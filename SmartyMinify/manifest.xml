@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<vqinstaller>
+    <id>SMARTY_MINIFY</id>
+	<install>
+		<copydir src="[MOD]/files" dest="/" replace="true"/>
+		<patch file="/.htaccess">
+			<search><![CDATA[~\#SmartyMinify(.+?)\#SmartyMinify~s]]></search>
+			<replace></replace>
+		</patch>
+		<patch file=".htaccess">
+			<search><![CDATA[~$~s]]></search>
+			<replace><![CDATA[
+#SmartyMinify
+<FilesMatch "(js|css).gz[1-9]$">
+	Header set Content-Encoding: gzip
+	<FilesMatch "css.gz[1-9]$">
+		ForceType text/css
+	</FilesMatch>
+	<FilesMatch "js.gz[1-9]$">
+		ForceType text/javascript
+	</FilesMatch>
+</FilesMatch>
+
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^cache/minify/(.+).gz([1-9])$ resize/gzip.php [L]
+#SmartyMinify]]></replace>
+		</patch>
+	</install>	
+	
+	<uninstall>
+		<patch file="/.htaccess">
+			<search><![CDATA[~\#SmartyMinify(.+?)\#SmartyMinify~s]]></search>
+			<replace></replace>
+		</patch>
+		<delete file="/api/Javascript.php"/>
+		<delete file="/api/Stylesheet.php"/>
+		<delete file="/resize/gzip.php"/>
+		<delete file="/resize/MatthiasMullie/Minify/CSSPacker.php"/>
+		<delete file="/vqmod/xml/smarty_minify.xml"/>
+	</uninstall>
+</vqinstaller>

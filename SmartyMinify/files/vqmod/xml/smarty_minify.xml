@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<modification>
+    <id>SMARTY_MINIFY</id>
+    <version>1.1</version>
+    <vqmver required="true">2.6.0</vqmver>
+    <author>Polevik Yurii</author>
+
+	<file name="api/Simpla.php">
+		<operation error="log" info="Register new api">
+            <search position="after"><![CDATA['design'     => 'Design',]]></search>
+            <add><![CDATA[#SMARTY_MINIFY
+		'js'     => 'Javascript',
+		'css'     => 'Stylesheet',
+#SMARTY_MINIFY]]></add>
+        </operation>
+	</file>
+
+	
+	<file name="view/View.php">
+		<operation error="log" info="Register new functions">
+            <search position="after"><![CDATA[// Настраиваем плагины для смарти]]></search>
+            <add><![CDATA[#SMARTY_MINIFY
+			// функции для работы с js 
+			$this->design->smarty->registerPlugin('block', 'js',		array($this, 'add_javascript_block'));
+			$this->design->smarty->registerPlugin('function', 'unset_js',		array($this, 'unset_javascript_function'));
+			$this->design->smarty->registerPlugin('function', 'javascript',		array($this, 'print_javascript'));
+		
+			// функции для работы с css 
+			$this->design->smarty->registerPlugin('block', 'css',		array($this, 'add_stylesheet_block'));
+			$this->design->smarty->registerPlugin('function', 'unset_css',		array($this, 'unset_stylesheet_function'));
+			$this->design->smarty->registerPlugin('function', 'stylesheet',		array($this, 'print_stylesheet'));
+#SMARTY_MINIFY]]></add>
+        </operation>
+		
+		<operation error="log" info="Add new functions">
+            <search position="before"><![CDATA[public function get_discounted_products_plugin($params, &$smarty)]]></search>
+            <add><![CDATA[#SMARTY_MINIFY
+	/*
+	* Функции для работа с файлами javascript
+	* Регистрация  js фал(а|ов) или кода
+	*/
+	public function add_javascript_block($params, $content, $smarty, &$repeat)
+	{
+		if(!isset($params['id']) || $repeat || (empty($content)) && empty($params['include']))
+			return false;
+
+		if(!isset($params['priority']))
+			$params['priority'] = 10;
+			
+		if(!empty($params['include']))
+			$this->js->add_files($params['id'], $params['include'], $params['priority']);
+		
+		if(!empty($content))
+			$this->js->add_code($params['id'], $content, $params['priority']);
+			
+		if(!empty($params['render']))
+			return $this->js->render($params['id']);
+	}	
+	/*
+	* Отмена регистрации js фал(а|ов) или кода
+	*/
+	public function unset_javascript_function($params, $smarty)
+	{
+		if(!isset($params['id']))
+			return false;
+
+		$this->js->unplug($params['id']);
+	}
+	/*
+	* Вывод упакованого js файла 
+	*/
+	public function print_javascript($params)
+	{
+		if(!isset($params['id']))
+			$params['id'] = null;
+			
+		if(!isset($params['combine']))
+			$params['combine'] = true;
+		
+		if(!isset($params['minify']))
+			$params['minify'] = null;
+	
+		return $this->js->render($params['id'], $params['minify'], $params['combine']);
+	}
+	
+	
+	/*
+	* Функции для работа с файлами стилей
+	* Регистрация  css фал(а|ов) или кода
+	*/
+	public function add_stylesheet_block($params, $content, $smarty, &$repeat)
+	{
+		if(!isset($params['id']) || $repeat || (empty($content)) && empty($params['include']))
+			return false;
+
+		if(!isset($params['priority']))
+			$params['priority'] = 10;
+			
+		if(!empty($params['include']))
+			$this->css->add_files($params['id'], $params['include'], $params['priority']);
+		
+		if(!empty($content))
+			$this->css->add_code($params['id'], $content, $params['priority']);
+			
+		if(!empty($params['render']))
+			return $this->css->render($params['id']);
+	}	
+	/*
+	* Отмена регистрации css фал(а|ов) или кода
+	*/
+	public function unset_stylesheet_function($params, $smarty)
+	{
+		if(!isset($params['id']))
+			return false;
+
+		$this->css->unplug($params['id']);
+	}
+	/*
+	* Вывод упакованого css файла 
+	*/
+	public function print_stylesheet($params)
+	{
+		if(!isset($params['id']))
+			$params['id'] = null;
+			
+		if(!isset($params['combine']))
+			$params['combine'] = true;
+		
+		if(!isset($params['minify']))
+			$params['minify'] = null;
+	
+		return $this->css->render($params['id'], $params['minify'], $params['combine']);
+	}
+#SMARTY_MINIFY]]></add>
+        </operation>
+	</file>	
+</modification>
