@@ -2,7 +2,7 @@
 
 /*
 *	@ name: SmartyMinify
-*	@ version: 1.2
+*	@ version: 1.3
 *	@ description: Расширения для работы с js/css 
 *	@ author: Polevik Yurii
 *	@ author_url: http://vk.com/polevik_yuriy
@@ -10,9 +10,8 @@
 
 
 
-class SmartyMinify extends vqInstaller {
-	
-	
+class SmartyMinify extends vqInstaller 
+{
 
 	public function __construct(){
 		
