@@ -41,7 +41,7 @@ class Stylesheet extends Simpla
 			$file = trim($path, '/ ');
 			$path = VQMod::modCheck($this->config->root_dir . $file);
 			if(is_file($path))
-				$event->data[$path] = (object) array('type'=>'file', 'time'=>filemtime($path), 'original'=>$file, 'event'=>$event->id, 'less'=>$less);
+				$event->data[$path] = (object) array('type'=>'file', 'time'=>($less ? 0: filemtime($path)), 'original'=>$file, 'event'=>$event->id, 'less'=>$less);
 		}
 
 		if(!$event->data)
@@ -156,7 +156,7 @@ class Stylesheet extends Simpla
 			foreach($events_data as $css=>$data)
 			{
 				if($data->less)
-					$this->parse_less($css, $data);
+					$this->verify_less($css, $data);
 				
 				if($data->type == 'code')
 					 $result .= $this->render_tag($css);
@@ -214,25 +214,30 @@ class Stylesheet extends Simpla
 
 		list($cacheFile, $cachePath) = $this->get_cacheFile($data, $prefix);
 
+		
+		// Есть less. Проверим его кеши
+		$less_verify = array();
+		
+		if($this->less_used)
+		{
+			$new_data = array();
+			foreach($data as $css=>$_data)
+			{
+				if($_data->less)
+					$less_verify[] = $this->verify_less($css, $_data);
+
+				$new_data[$css] = $_data;
+			}
+			$data = $new_data;						
+		}
+		
+		// Что то не так в кеше less. Обновим
+		if(in_array(false, $less_verify) && is_file($cachePath))
+			unlink($cachePath);
+		
 		// Нет основного кеш-файла 
 		if(!is_file($cachePath))
 		{
-			
-			// Есть less. Проверим и компилируем массив
-			if($this->less_used)
-			{
-				$new_data = array();
-				foreach($data as $css=>$_data)
-				{
-					if($_data->less)
-						$this->parse_less($css, $_data);
-
-					$new_data[$css] = $_data;
-				}
-				$data = $new_data;						
-			}
-			
-			
 			$minifier = $this->get_minifier(array_keys($data), $minify);
 			$content = $minifier->minify($cachePath);
 			
@@ -274,9 +279,10 @@ class Stylesheet extends Simpla
 	/*
 	* Обрабока less синтаксиса
 	*/
-	protected function parse_less(&$resource, &$data)
+	protected function verify_less(&$resource, &$data)
 	{
-
+		$valid = true;
+		
 		try {
 
 			$key = $this->hash(var_export($data, 1));
@@ -286,76 +292,67 @@ class Stylesheet extends Simpla
 			else
 				$prefix = pathinfo($data->original, PATHINFO_FILENAME);
 			
-			list($cacheFile, $cachePath) = $this->get_cacheFile($data, $prefix . '.less');
+			list($outputFile, $outputPath) = $this->get_cacheFile($data, $prefix . '.less');
+			
+			$cachePath = $outputPath . '.cache';
 
-			// Если код
-			if($data->type == 'code')
+			// нету кеша или конечного файла
+			if(!is_file($outputPath) || !is_readable($cachePath) || !is_array($cache = @unserialize(file_get_contents($cachePath))))
 			{
-				// Есть кеш-файл
-				if(is_file($cachePath))
-				{
-					$resource = file_get_contents($cachePath);
-					return true;
-				}
-				else
-				{
-					$resource = $this->get_less()->compile($resource);
-					return file_put_contents($cachePath, $resource);
-				}
+				$valid = false;
 			}
 			else
 			{
-				if (!is_file($cachePath) || filemtime($resource) > filemtime($cachePath)) 
+				foreach ($cache['files'] as $fname => $ftime) 
 				{
-					
-					// Обрабатываем less
-					$content = $this->get_less()->compileFile($resource);
-
-					// Подменим путь к прикладным файлам
-					$minifier = $this->get_minifier($content, false);
-					$minifier->setRootSource($data->original);
-					$minifier->minify($cachePath);
-
+					if(!is_file($fname) or filemtime($fname) > $ftime)
+					{
+						$valid = false;
+						break;
+					}
 				}
-
-				$resource = $cachePath;
-				$data->original = $cacheFile;
-				return true;
+				
+			}
+			
+			// Less изменился
+			if(!$valid)
+			{
+				include_once $this->config->root_dir . '/resize/less/lessc.inc.php';
+				$cache = lessc::cexecute($resource);
+				
+				if($data->type == 'file')
+				{
+					// Подменим путь к прикладным файлам
+					$minifier = $this->get_minifier($cache['compiled'], false);
+					$minifier->setRootSource($data->original);
+					$cache['compiled'] = $minifier->minify($outputPath);
+				}
+				else
+				{
+					file_put_contents($outputPath, $cache['compiled']);
+				}
+				unset($cache['compiled']); // Для уменьшения размера кеша 
+				file_put_contents($cachePath, serialize($cache));
 			}
 				
-		
-		} 
+			$resource = $outputPath;
+			$data->original = $outputFile;
+		}
 		catch (exception $e) 
 		{
-			trigger_error("Less error: " . $e->getMessage(), E_USER_WARNING);
+			trigger_error("Less error: " . $e->getMessage(), E_USER_ERROR);
+			$valid = false;
 		}
 
-		return false;
+		return $valid;
 	}
 	
 	
 	
 	
-	
-	
-	/* 
-	* Получения обыекта lessphp
-	*/	
-	protected function get_less()
-	{
-		if(is_null($this->less_object))
-		{
-			include_once $this->config->root_dir . '/resize/less/lessc.inc.php';
-			$this->less_object = new lessc;
-		}
-		return $this->less_object;
-	}
-	
-		
-
 	
 	/*
-	* MatthiasMullie minify object
+	* Получение MatthiasMullie minify object
 	*/
 	protected function get_minifier($data, $minify)
 	{
@@ -363,7 +360,13 @@ class Stylesheet extends Simpla
 		require_once $this->config->root_dir . '/resize/MatthiasMullie/autoload.php';
 		
 		if($minify)
+		{
 			$minifier = new MatthiasMullie\Minify\CSS($data);
+			
+			// Выключаем импорт прикладных файлов. Вскоре доработаю и их кеширвоание
+			$minifier->setMaxImportSize(0);
+			$minifier->setImportExtensions(array());
+		}
 		else // Просто клеим
 			$minifier = new MatthiasMullie\Minify\CSSPacker($data);
 			
