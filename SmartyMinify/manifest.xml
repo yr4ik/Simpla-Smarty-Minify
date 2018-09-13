@@ -11,7 +11,9 @@
 			<search><![CDATA[~#VQMOD#~s]]></search>
 			<replace><![CDATA[#SmartyMinify
 <FilesMatch "(js|css).gz[1-9]$">
-	Header set Content-Encoding: gzip
+	<IfModule mod_headers.c>
+		Header set Content-Encoding: gzip
+	</IfModule>
 	<FilesMatch "css.gz[1-9]$">
 		ForceType text/css
 	</FilesMatch>
