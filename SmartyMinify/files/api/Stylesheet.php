@@ -389,12 +389,22 @@ class Stylesheet extends Simpla
 			
 			
 			
-	protected function render_tag($content, $css_file)
+	protected function render_tag($content, $css_file=null)
 	{
 		if($content)
+		{
 			return '<style type="text/css">' . $content . '</style>';
-		else
-			return '<link href="' . $css_file . '" rel="stylesheet"/>';
+		}
+		elseif(!is_null($css_file))
+		{
+			$baseurl = '/'; 
+			if(is_string($this->config->minify_baseurl))
+				$baseurl = ($this->config->minify_baseurl == 'hostname' ? $this->config->root_url . '/' : $this->config->minify_baseurl);
+			
+			return '<link href="' . $baseurl . $css_file . '" rel="stylesheet"/>';
+		}
+		
+		return '';
 	}
 	
 			

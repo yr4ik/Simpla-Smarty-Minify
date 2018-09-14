@@ -239,10 +239,23 @@ class Javascript extends Simpla
 	public function render_tag($content, $js_file=null)
 	{
 		$tag = '<script type="text/javascript"';
+		
 		if($content)
+		{
 			$tag .= '>'.$content;
+		}
+		elseif(!is_null($js_file))
+		{
+			$baseurl = '/'; 
+			if(is_string($this->config->minify_baseurl))
+				$baseurl = ($this->config->minify_baseurl == 'hostname' ? $this->config->root_url . '/' : $this->config->minify_baseurl);
+
+			$tag .= ' src="' . $baseurl . $js_file.'">';
+		}
 		else
-			$tag .= ' src="'.$js_file.'">';
+		{
+			return '';
+		}
 		
 		return $tag . '</script>';
 	}
