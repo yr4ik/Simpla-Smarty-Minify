@@ -18,7 +18,7 @@ class Javascript extends Simpla
 	
 	protected $cache_dir = 'js/';
 	
-	protected $min_filesize = 256;
+	protected $min_filesize = 2000;
 	
 	protected $order_num = 0;
 
@@ -58,9 +58,11 @@ class Javascript extends Simpla
 	{
 		$event = $this->get_event($id);
 		
-		if(!$code = trim($code))
-			return false;
+		$code = trim(preg_replace('#^<script([^>]*?)>(.+)</script>$#is', '\\2', trim($code)));
 		
+		if(!trim($code))
+			return false;
+
 		$event->data[$code] = (object) array('type'=>'code', 'time'=>0, 'event'=>$event->id);
 		$event->priority = intval($priority);
 		
@@ -69,11 +71,15 @@ class Javascript extends Simpla
 	
 	/*
 	* Отмена регистрации js фал(а|ов) или кода
-	* @param $id
+	* @param $events
 	*/
-	public function unplug($id)
+	public function unplug($events)
 	{
-		unset($this->events[$id]);
+		if(is_string($events))
+			$events = array_map('trim', explode(',', $events));
+		
+		foreach((array) $events as $id)
+			if($id) unset($this->events[$id]);
 	}
 	
 	
@@ -111,27 +117,30 @@ class Javascript extends Simpla
 			}
 		}
 
-		// Если задан айди ресурса отдадим только его
+		// Если заданы айди ресурсов отдадим только их
+		$events = array();
 		if(!is_null($event_id))
 		{
-			if(isset($this->events[$event_id]))
-			{
-				$events_data = $this->events[$event_id]->data;
-				// Очищаем от повторного рендеринга
-				$this->unplug($event_id);
-			}
+			if(is_string($event_id))
+				$event_id = array_map('trim', explode(',', $event_id));
+			
+			$events = array_intersect_key($this->events, array_fill_keys((array) $event_id, 0));
+			$event_id = array_keys($events);
 		}
 		else
 		{
-			uasort($this->events, array($this, 'sort_priority_callback'));
-			
-			$events_data = array();
-			foreach($this->events as $ev)
-				$events_data = array_merge($events_data, $ev->data);
-			
-			// Очищаем от повторного рендеринга
-			$this->events = array();
+			$events = $this->events;
 		}
+
+
+		if(count($events) > 1)
+			uasort($events, array($this, 'sort_priority_callback'));
+			
+		$events_data = array();
+		foreach($events as $ev)
+			$events_data = array_merge($events_data, $ev->data);
+
+		$this->unplug(array_keys($events));
 
 		$result = '';
 		
@@ -170,7 +179,7 @@ class Javascript extends Simpla
 			else // Пакуем в все в 1 файл
 			{
 				
-				$prefix = 'pack';
+				$prefix = 'pack' . count($events_data);
 				if(count($events_data)==1)
 				{
 					$e = reset($events_data);
@@ -179,9 +188,12 @@ class Javascript extends Simpla
 					else
 						$prefix = pathinfo($e->original, PATHINFO_FILENAME);
 				}
-				elseif(!is_null($event_id))
+				elseif(is_array($event_id))
 				{
-					$prefix = $event_id;
+					if(count($event_id) <= 2)
+						$prefix = implode('-', $event_id);
+					else
+						$prefix = 'events' . count($event_id);
 				}
 				$result = $this->proteced($events_data, $prefix, $minify);
 			}
@@ -195,28 +207,32 @@ class Javascript extends Simpla
 	
 	protected function proteced($data, $prefix, $minify)
 	{
+		$min_ext = '.min';
+		$subext = ($minify ? $min_ext:'');
 		
-		if($minify && substr($prefix, -4)!=='.min')
-			$prefix .= '.min';
+		if(substr($prefix, -4) == $min_ext)
+		{
+			$subext = $min_ext;
+			$prefix = substr($prefix, 0, -4);
+		}
 
-		list($cacheFile, $cachePath) = $this->get_cacheFile($data, $prefix);
+		list($cacheFile, $cachePath) = $this->get_cacheFile($data, $prefix, $subext);
 
 		// Нет основного кеш-файла 
 		if(!is_file($cachePath))
 		{
 			$content = $this->minify($data, $cachePath, $minify);
-			if($this->gzip_level && !$content)
-				$cacheFile = $cacheFile.'.gz'.$this->gzip_level;
 		}
 		else
 		{
 			$content = false;
 			if(filesize($cachePath) < $this->min_filesize)
 				$content = file_get_contents($cachePath);
-			elseif($this->gzip_level)
-				$cacheFile = $cacheFile.'.gz'.$this->gzip_level;
 		}
 
+		if($this->gzip_level && !$content)
+			$cacheFile = $cacheFile.'.gz'.$this->gzip_level;
+		
 		return $this->render_tag($content, $cacheFile);
 	}
 
@@ -290,11 +306,10 @@ class Javascript extends Simpla
 	/*
 	* Формируем название кеш-файла исходя из параметров
 	*/
-	protected function get_cacheFile($data, $prefix)
+	protected function get_cacheFile($data, $prefix, $subext='')
 	{
 		$key = $this->hash(var_export($data, 1));
-
-		$cacheFile = $this->cache_dir . $key . '_' . $prefix . '.js';
+		$cacheFile = $this->cache_dir . $prefix . '_' . $key . $subext . '.js';
 		return array($cacheFile, $this->config->root_dir . $cacheFile);
 	}
 			

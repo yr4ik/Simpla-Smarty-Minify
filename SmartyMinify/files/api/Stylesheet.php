@@ -65,7 +65,8 @@ class Stylesheet extends Simpla
 	{
 		$event = $this->get_event($id);
 		
-		if(!$code = trim($code))
+		$code = trim(preg_replace('#^<style([^>]*?)>(.+)</style>$#is', '\\2', trim($code)));
+		if(!$code)
 			return false;
 		
 		$event->data[$code] = (object) array('type'=>'code', 'time'=>0, 'event'=>$event->id, 'less'=>$less);
@@ -79,12 +80,17 @@ class Stylesheet extends Simpla
 	
 	/*
 	* Отмена регистрации css фал(а|ов) или кода
-	* @param $id
+	* @param $events
 	*/
-	public function unplug($id)
+	public function unplug($events)
 	{
-		unset($this->events[$id]);
+		if(is_string($events))
+			$events = array_map('trim', explode(',', $events));
+		
+		foreach((array) $events as $id)
+			if($id) unset($this->events[$id]);
 	}
+	
 	
 	
 	/*
@@ -122,27 +128,29 @@ class Stylesheet extends Simpla
 		}
 
 		// Если задан айди ресурса отдадим только его
+		$events = array();
 		if(!is_null($event_id))
 		{
-			if(isset($this->events[$event_id]))
-			{
-				$events_data = $this->events[$event_id]->data;
-				// Очищаем от повторного рендеринга
-				$this->unplug($event_id);
-			}
+			if(is_string($event_id))
+				$event_id = array_map('trim', explode(',', $event_id));
+			
+			$events = array_intersect_key($this->events, array_fill_keys((array) $event_id, 0));
+			$event_id = array_keys($events);
 		}
 		else
 		{
-			uasort($this->events, array($this, 'sort_priority_callback'));
-			
-			$events_data = array();
-			foreach($this->events as $ev)
-				$events_data = array_merge($events_data, $ev->data);
-			
-			// Очищаем от повторного рендеринга
-			$this->events = array();
+			$events = $this->events;
 		}
+		
+		if(count($events) > 1)
+			uasort($events, array($this, 'sort_priority_callback'));
+			
+		$events_data = array();
+		foreach($events as $ev)
+			$events_data = array_merge($events_data, $ev->data);
 
+		$this->unplug(array_keys($events));
+		
 		$result = '';
 		
 		//Если нет ничего для вывода
@@ -192,9 +200,12 @@ class Stylesheet extends Simpla
 					else
 						$prefix = pathinfo($e->original, PATHINFO_FILENAME);
 				}
-				elseif(!is_null($event_id))
+				elseif(is_array($event_id))
 				{
-					$prefix = $event_id;
+					if(count($event_id) <= 2)
+						$prefix = implode('-', $event_id);
+					else
+						$prefix = 'events' . count($event_id);
 				}
 				$result = $this->proteced($events_data, $prefix, $minify);
 			}
@@ -208,12 +219,16 @@ class Stylesheet extends Simpla
 	
 	protected function proteced($data, $prefix, $minify)
 	{
+		$min_ext = '.min';
+		$subext = ($minify ? $min_ext:'');
 		
-		if($minify && substr($prefix, -4)!=='.min')
-			$prefix .= '.min';
+		if(substr($prefix, -4) == $min_ext)
+		{
+			$subext = $min_ext;
+			$prefix = substr($prefix, 0, -4);
+		}
 
-		list($cacheFile, $cachePath) = $this->get_cacheFile($data, $prefix);
-
+		list($cacheFile, $cachePath) = $this->get_cacheFile($data, $prefix, $subext);
 		
 		// Есть less. Проверим его кеши
 		$less_verify = array();
@@ -292,7 +307,7 @@ class Stylesheet extends Simpla
 			else
 				$prefix = pathinfo($data->original, PATHINFO_FILENAME);
 			
-			list($outputFile, $outputPath) = $this->get_cacheFile($data, $prefix . '.less');
+			list($outputFile, $outputPath) = $this->get_cacheFile($data, $prefix, '.less');
 			
 			$cachePath = $outputPath . '.cache';
 
@@ -379,13 +394,13 @@ class Stylesheet extends Simpla
 	/*
 	* Формируем название кеш-файла исходя из параметров
 	*/
-	protected function get_cacheFile($data, $prefix)
+	protected function get_cacheFile($data, $prefix, $subext='')
 	{
 		$key = $this->hash(var_export($data, 1));
-
-		$cacheFile = $this->cache_dir . $key . '_' . $prefix . '.css';
+		$cacheFile = $this->cache_dir . $prefix . '_' . $key . $subext . '.css';
 		return array($cacheFile, $this->config->root_dir . $cacheFile);
 	}
+			
 			
 			
 			
